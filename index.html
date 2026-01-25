@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Loldle - Classic Mode</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="lang-selector">
+                <button class="lang-btn active" data-lang="es">ES</button>
+                <button class="lang-btn" data-lang="en">EN</button>
+            </div>
+            <h1 class="title">LoLdle</h1>
+            <p class="subtitle" data-i18n="subtitle">MODO CLÁSICO</p>
+        </div>
+
+        <!-- Search Bar -->
+        <div id="searchContainer" class="search-container">
+            <div class="search-wrapper">
+                <input
+                    type="text"
+                    id="searchInput"
+                    data-i18n-placeholder="search"
+                    placeholder="ESCRIBE UN CAMPEÓN..."
+                    class="search-input"
+                    autocomplete="off"
+                />
+            </div>
+            
+            <!-- Suggestions dropdown -->
+            <div id="suggestions" class="suggestions hidden"></div>
+        </div>
+
+        <!-- Column Headers -->
+        <div id="columnHeaders" class="column-headers hidden">
+            <div class="column-header" data-i18n="gender">GÉNERO</div>
+            <div class="column-header" data-i18n="position">LÍNEA</div>
+            <div class="column-header" data-i18n="species">CLASE</div>
+            <div class="column-header" data-i18n="resource">RECURSO</div>
+            <div class="column-header" data-i18n="range">TIPO</div>
+            <div class="column-header" data-i18n="region">REGIÓN</div>
+            <div class="column-header" data-i18n="release">AÑO</div>
+        </div>
+
+        <!-- Guesses Container -->
+        <div id="guessesContainer" class="guesses-container"></div>
+
+        <!-- Win State -->
+        <div id="winState" class="win-state hidden">
+            <div class="win-emoji">🏆</div>
+            <h2 class="win-title" data-i18n="victory">¡VICTORIA!</h2>
+            <p class="win-message" id="winMessage"></p>
+            <p class="win-subtitle" data-i18n="comeback">VUELVE MAÑANA POR UN NUEVO DESAFÍO</p>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats">
+    <div class="stat-card">
+        <div class="stat-value amber" id="attemptsCount">0</div>
+        <div class="stat-label" data-i18n="attempts">INTENTOS DEL DÍA</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value cyan" id="streakCount">0</div>
+        <div class="stat-label" data-i18n="streak">RACHA</div>
+    </div>
+</div>
+
+    <script>
+        // Translations
+        const translations = {
+            es: {
+                subtitle: 'MODO CLÁSICO',
+                search: 'ESCRIBE UN CAMPEÓN...',
+                gender: 'GÉNERO',
+                position: 'LÍNEA',
+                species: 'ROL',
+                resource: 'RECURSO',
+                range: 'TIPO',
+                region: 'REGIÓN',
+                release: 'AÑO DE LANZAMIENTO',
+                victory: '¡VICTORIA!',
+                comeback: 'VUELVE MAÑANA POR UN NUEVO DESAFÍO',
+                attempts: 'INTENTOS',
+                wins: 'VICTORIAS HOY',
+                streak: 'RACHA',
+                male: 'MASCULINO',
+                female: 'FEMENINO',
+                other: 'OTRO',
+                melee: 'CUERPO A CUERPO',
+                ranged: 'RANGO',
+                mana: 'MANÁ',
+                energy: 'ENERGÍA',
+                noMana: 'SIN MANÁ',
+                guessedIn: 'Adivinaste {name} en {count} {word}!',
+                attempt: 'INTENTO',
+                attempts_plural: 'INTENTOS DEL DÍA'
+                
+            },
+            en: {
+                subtitle: 'CLASSIC MODE',
+                search: 'TYPE A CHAMPION...',
+                gender: 'GENDER',
+                position: 'POSITION',
+                species: 'ROLE',
+                resource: 'RESOURCE',
+                range: 'TYPE',
+                region: 'REGION',
+                release: 'RELEASE DATE',
+                victory: 'VICTORY!',
+                comeback: 'COME BACK TOMORROW FOR A NEW CHALLENGE',
+                attempts: 'ATTEMPTS',
+                wins: 'WINS TODAY',
+                streak: 'STREAK',
+                male: 'MALE',
+                female: 'FEMALE',
+                other: 'OTHER',
+                melee: 'MELEE',
+                ranged: 'RANGED',
+                mana: 'MANA',
+                energy: 'ENERGY',
+                noMana: 'NO MANA',
+                guessedIn: 'You guessed {name} in {count} {word}!',
+                attempt: 'attempt',
+                attempts: 'TODAY\'S ATTEMPTS',
+            }
+        };
+
+        let currentLang = 'es';
+
+        function t(key) {
+            return translations[currentLang][key] || key;
+        }
+
+        function updateLanguage() {
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                el.textContent = t(el.dataset.i18n);
+            });
+            
+            document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+                el.placeholder = t(el.dataset.i18nPlaceholder);
+            });
+            
+            if (gameWon && dailyChampion) {
+                const count = guesses.length;
+                const word = count === 1 ? t('attempt') : t('attempts_plural');
+                winMessage.textContent = t('guessedIn')
+                    .replace('{name}', dailyChampion.name.toUpperCase())
+                    .replace('{count}', count)
+                    .replace('{word}', word);
+            }
+        }
+
+        // Language selector
+        document.querySelectorAll('.lang-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentLang = btn.dataset.lang;
+                updateLanguage();
+                renderGuesses();
+            });
+        });
+
+        // CDN
+        const DDRAGON_VERSION = '14.24.1';
+        const DDRAGON_CDN = `https://ddragon.leagueoflegends.com/cdn/${DDRAGON_VERSION}/img/champion/`;
+
+        // Champion data
+        const CHAMPIONS_DATA = [
+    { id: "Aatrox", name: "Aatrox", iconKey: "Aatrox", gender: "male", attackType: "close", releaseDate: 2013, region: "runeterra", lane: "top", resource: "noMana", genre: "Luchador" },
+    { id: "Ahri", name: "Ahri", iconKey: "Ahri", gender: "female", attackType: "range", releaseDate: 2011, region: "ionia", lane: "mid", resource: "mana", genre: "Mago" },
+    { id: "Akali", name: "Akali", iconKey: "Akali", gender: "female", attackType: "close", releaseDate: 2010, region: "ionia", lane: "mid", resource: "energy", genre: "Asesino" },
+    { id: "Akshan", name: "Akshan", iconKey: "Akshan", gender: "male", attackType: "range", releaseDate: 2021, region: "shurima", lane: "bottom", resource: "mana", genre: "Tirador" },
+    { id: "Alistar", name: "Alistar", iconKey: "Alistar", gender: "male", attackType: "close", releaseDate: 2009, region: "runeterra", lane: "support", resource: "mana", genre: "Tanque" },
+    { id: "Amumu", name: "Amumu", iconKey: "Amumu", gender: "male", attackType: "close", releaseDate: 2009, region: "shurima", lane: "jungle", resource: "mana", genre: "Tanque" },
+    { id: "Anivia", name: "Anivia", iconKey: "Anivia", gender: "female", attackType: "range", releaseDate: 2009, region: "freljord", lane: "mid", resource: "mana", genre: "Mago" },
+    { id: "Annie", name: "Annie", iconKey: "Annie", gender: "female", attackType: "range", releaseDate: 2009, region: "runeterra", lane: "mid", resource: "mana", genre: "Mago" },
+    { id: "Aphelios", name: "Aphelios", iconKey: "Aphelios", gender: "male", attackType: "range", releaseDate: 2019, region: "mount-targon", lane: "bottom", resource: "mana", genre: "Tirador" },
+    { id: "Ashe", name: "Ashe", iconKey: "Ashe", gender: "female", attackType: "range", releaseDate: 2009, region: "freljord", lane: "bottom", resource: "mana", genre: "Tirador" },
+    { id: "AurelionSol", name: "Aurelion Sol", iconKey: "AurelionSol", gender: "male", attackType: "range", releaseDate: 2016, region: "mount-targon", lane: "mid", resource: "mana", genre: "Mago" },
+    { id: "Azir", name: "Azir", iconKey: "Azir", gender: "male", attackType: "range", releaseDate: 2014, region: "shurima", lane: "mid", resource: "mana", genre: "Mago" },
+    { id: "Bard", name: "Bard", iconKey: "Bard", gender: "male", attackType: "range", releaseDate: 2015, region: "runeterra", lane: "support", resource: "mana", genre: "Soporte" },
+    { id: "Belveth", name: "Bel'Veth", iconKey: "Belveth", gender: "female", attackType: "close", releaseDate: 2022, region: "void", lane: "jungle", resource: "noMana", genre: "Luchador" },
+    { id: "Blitzcrank", name: "Blitzcrank", iconKey: "Blitzcrank", gender: "male", attackType: "close", releaseDate: 2009, region: "zaun", lane: "support", resource: "mana", genre: "Tanque" },
+    { id: "Brand", name: "Brand", iconKey: "Brand", gender: "male", attackType: "range", releaseDate: 2011, region: "runeterra", lane: "support", resource: "mana", genre: "Mago" },
+    { id: "Braum", name: "Braum", iconKey: "Braum", gender: "male", attackType: "close", releaseDate: 2014, region: "freljord", lane: "support", resource: "mana", genre: "Tanque" },
+    { id: "Briar", name: "Briar", iconKey: "Briar", gender: "female", attackType: "close", releaseDate: 2023, region: "noxus", lane: "jungle", resource: "noMana", genre: "Luchador" },
+    { id: "Caitlyn", name: "Caitlyn", iconKey: "Caitlyn", gender: "female", attackType: "range", releaseDate: 2011, region: "piltover", lane: "bottom", resource: "mana", genre: "Tirador" },
+    { id: "Camille", name: "Camille", iconKey: "Camille", gender: "female", attackType: "close", releaseDate: 2016, region: "piltover", lane: "top", resource: "mana", genre: "Luchador" },
+    { id: "Cassiopeia", name: "Cassiopeia", iconKey: "Cassiopeia", gender: "female", attackType: "range", releaseDate: 2010, region: "noxus", lane: "mid", resource: "mana", genre: "Mago" },
+    { id: "Chogath", name: "Cho'Gath", iconKey: "Chogath", gender: "male", attackType: "close", releaseDate: 2009, region: "void", lane: "top", resource: "mana", genre: "Tanque" },
+    { id: "Corki", name: "Corki", iconKey: "Corki", gender: "male", attackType: "range", releaseDate: 2009, region: "bandle-city", lane: "mid", resource: "mana", genre: "Tirador" },
+    { id: "Darius", name: "Darius", iconKey: "Darius", gender: "male", attackType: "close", releaseDate: 2012, region: "noxus", lane: "top", resource: "mana", genre: "Luchador" },
+    { id: "Diana", name: "Diana", iconKey: "Diana", gender: "female", attackType: "close", releaseDate: 2012, region: "mount-targon", lane: "jungle", resource: "mana", genre: "Luchador" },
+    { id: "Draven", name: "Draven", iconKey: "Draven", gender: "male", attackType: "range", releaseDate: 2012, region: "noxus", lane: "bottom", resource: "mana", genre: "Tirador" },
+    { id: "DrMundo", name: "Dr. Mundo", iconKey: "DrMundo", gender: "male", attackType: "close", releaseDate: 2009, region: "zaun", lane: "top", resource: "noMana", genre: "Tanque" },
+    { id: "Ekko", name: "Ekko", iconKey: "Ekko", gender: "male", attackType: "close", releaseDate: 2015, region: "zaun", lane: "mid", resource: "mana", genre: "Asesino" },
+    { id: "Elise", name: "Elise", iconKey: "Elise", gender: "female", attackType: "range", releaseDate: 2012, region: "shadow-isles", lane: "jungle", resource: "mana", genre: "Mago" },
+    { id: "Evelynn", name: "Evelynn", iconKey: "Evelynn", gender: "female", attackType: "close", releaseDate: 2009, region: "runeterra", lane: "jungle", resource: "mana", genre: "Asesino" },
+    { id: "Ezreal", name: "Ezreal", iconKey: "Ezreal", gender: "male", attackType: "range", releaseDate: 2010, region: "piltover", lane: "bottom", resource: "mana", genre: "Tirador" },
+    { id: "Fiddlesticks", name: "Fiddlesticks", iconKey: "Fiddlesticks", gender: "male", attackType: "close", releaseDate: 2009, region: "runeterra", lane: "jungle", resource: "mana", genre: "Mago" },
+    { id: "Fiora", name: "Fiora", iconKey: "Fiora", gender: "female", attackType: "close", releaseDate: 2012, region: "demacia", lane: "top", resource: "mana", genre: "Luchador" },
+    { id: "Fizz", name: "Fizz", iconKey: "Fizz", gender: "male", attackType: "close", releaseDate: 2011, region: "bilgewater", lane: "mid", resource: "mana", genre: "Asesino" },
+    { id: "Galio", name: "Galio", iconKey: "Galio", gender: "male", attackType: "close", releaseDate: 2010, region: "demacia", lane: "mid", resource: "mana", genre: "Tanque" },
+    { id: "Gangplank", name: "Gangplank", iconKey: "Gangplank", gender: "male", attackType: "close", releaseDate: 2009, region: "bilgewater", lane: "top", resource: "mana", genre: "Luchador" },
+    { id: "Garen", name: "Garen", iconKey: "Garen", gender: "male", attackType: "close", releaseDate: 2010, region: "demacia", lane: "top", resource: "noMana", genre: "Luchador" },
+    { id: "Gnar", name: "Gnar", iconKey: "Gnar", gender: "male", attackType: "close", releaseDate: 2014, region: "freljord", lane: "top", resource: "noMana", genre: "Luchador" },
+    { id: "Gragas", name: "Gragas", iconKey: "Gragas", gender: "male", attackType: "close", releaseDate: 2010, region: "freljord", lane: "jungle", resource: "mana", genre: "Luchador" },
+    { id: "Graves", name: "Graves", iconKey: "Graves", gender: "male", attackType: "range", releaseDate: 2011, region: "bilgewater", lane: "jungle", resource: "mana", genre: "Tirador" },
+    { id: "Gwen", name: "Gwen", iconKey: "Gwen", gender: "female", attackType: "close", releaseDate: 2021, region: "shadow-isles", lane: "top", resource: "mana", genre: "Luchador" },
+    { id: "Hecarim", name: "Hecarim", iconKey: "Hecarim", gender: "male", attackType: "close", releaseDate: 2012, region: "shadow-isles", lane: "jungle", resource: "mana", genre: "Luchador" },
+    { id: "Heimerdinger", name: "Heimerdinger", iconKey: "Heimerdinger", gender: "male", attackType: "range", releaseDate: 2009, region: "piltover", lane: "mid", resource: "mana", genre: "Mago" },
+    { id: "Hwei", name: "Hwei", iconKey: "Hwei", gender: "male", attackType: "range", releaseDate: 2023, region: "ionia", lane: "mid", resource: "mana", genre: "Mago" },
+    { id: "Illaoi", name: "Illaoi", iconKey: "Illaoi", gender: "female", attackType: "close", releaseDate: 2015, region: "bilgewater", lane: "top", resource: "mana", genre: "Luchador" },
+    { id: "Irelia", name: "Irelia", iconKey: "Irelia", gender: "female", attackType: "close", releaseDate: 2010, region: "ionia", lane: "top", resource: "mana", genre: "Luchador" },
+    { id: "Ivern", name: "Ivern", iconKey: "Ivern", gender: "male", attackType: "range", releaseDate: 2016, region: "ionia", lane: "jungle", resource: "mana", genre: "Soporte" },
+    { id: "Janna", name: "Janna", iconKey: "Janna", gender: "female", attackType: "range", releaseDate: 2009, region: "zaun", lane: "support", resource: "mana", genre: "Soporte" },
+    { id: "JarvanIV", name: "Jarvan IV", iconKey: "JarvanIV", gender: "male", attackType: "close", releaseDate: 2011, region: "demacia", lane: "jungle", resource: "mana", genre: "Luchador" },
+    { id: "Jax", name: "Jax", iconKey: "Jax", gender: "male", attackType: "close", releaseDate: 2009, region: "runeterra", lane: "top", resource: "mana", genre: "Luchador" },
+    { id: "Jayce", name: "Jayce", iconKey: "Jayce", gender: "male", attackType: "range", releaseDate: 2012, region: "piltover", lane: "top", resource: "mana", genre: "Luchador" },
+    { id: "Jhin", name: "Jhin", iconKey: "Jhin", gender: "male", attackType: "range", releaseDate: 2016, region: "ionia", lane: "bottom", resource: "mana", genre: "Tirador" },
+    { id: "Jinx", name: "Jinx", iconKey: "Jinx", gender: "female", attackType: "range", releaseDate: 2013, region: "zaun", lane: "bottom", resource: "mana", genre: "Tirador" },
+    { id: "Kaisa", name: "Kai'Sa", iconKey: "Kaisa", gender: "female", attackType: "range", releaseDate: 2018, region: "void", lane: "bottom", resource: "mana", genre: "Tirador" },
+    { id: "Kalista", name: "Kalista", iconKey: "Kalista", gender: "female", attackType: "range", releaseDate: 2014, region: "shadow-isles", lane: "bottom", resource: "mana", genre: "Tirador" },
+    { id: "Karma", name: "Karma", iconKey: "Karma", gender: "female", attackType: "range", releaseDate: 2011, region: "ionia", lane: "support", resource: "mana", genre: "Mago" },
+    { id: "Karthus", name: "Karthus", iconKey: "Karthus", gender: "male", attackType: "range", releaseDate: 2009, region: "shadow-isles", lane: "jungle", resource: "mana", genre: "Mago" },
+    { id: "Kassadin", name: "Kassadin", iconKey: "Kassadin", gender: "male", attackType: "close", releaseDate: 2009, region: "void", lane: "mid", resource: "mana", genre: "Asesino" },
+    { id: "Katarina", name: "Katarina", iconKey: "Katarina", gender: "female", attackType: "close", releaseDate: 2009, region: "noxus", lane: "mid", resource: "noMana", genre: "Asesino" },
+    { id: "Kayle", name: "Kayle", iconKey: "Kayle", gender: "female", attackType: "range", releaseDate: 2009, region: "demacia", lane: "top", resource: "mana", genre: "Luchador" },
+    { id: "Kayn", name: "Kayn", iconKey: "Kayn", gender: "male", attackType: "close", releaseDate: 2017, region: "ionia", lane: "jungle", resource: "mana", genre: "Luchador" },
+    { id: "Kennen", name: "Kennen", iconKey: "Kennen", gender: "male", attackType: "range", releaseDate: 2010, region: "ionia", lane: "top", resource: "energy", genre: "Mago" },
+    { id: "Khazix", name: "Kha'Zix", iconKey: "Khazix", gender: "male", attackType: "close", releaseDate: 2012, region: "void", lane: "jungle", resource: "mana", genre: "Asesino" },
+    { id: "Kindred", name: "Kindred", iconKey: "Kindred", gender: "other", attackType: "range", releaseDate: 2015, region: "runeterra", lane: "jungle", resource: "mana", genre: "Tirador" },
+    { id: "Kled", name: "Kled", iconKey: "Kled", gender: "male", attackType: "close", releaseDate: 2016, region: "noxus", lane: "top", resource: "noMana", genre: "Luchador" },
+    { id: "KogMaw", name: "Kog'Maw", iconKey: "KogMaw", gender: "male", attackType: "range", releaseDate: 2010, region: "void", lane: "bottom", resource: "mana", genre: "Tirador" },
+    { id: "KSante", name: "K'Sante", iconKey: "KSante", gender: "male", attackType: "close", releaseDate: 2022, region: "shurima", lane: "top", resource: "mana", genre: "Tanque" },
+    { id: "Leblanc", name: "LeBlanc", iconKey: "Leblanc", gender: "female", attackType: "range", releaseDate: 2010, region: "noxus", lane: "mid", resource: "mana", genre: "Asesino" },
+    { id: "LeeSin", name: "Lee Sin", iconKey: "LeeSin", gender: "male", attackType: "close", releaseDate: 2011, region: "ionia", lane: "jungle", resource: "energy", genre: "Luchador" },
+    { id: "Leona", name: "Leona", iconKey: "Leona", gender: "female", attackType: "close", releaseDate: 2011, region: "mount-targon", lane: "support", resource: "mana", genre: "Tanque" },
+    { id: "Lillia", name: "Lillia", iconKey: "Lillia", gender: "female", attackType: "range", releaseDate: 2020, region: "ionia", lane: "jungle", resource: "mana", genre: "Luchador" },
+    { id: "Lissandra", name: "Lissandra", iconKey: "Lissandra", gender: "female", attackType: "range", releaseDate: 2013, region: "freljord", lane: "mid", resource: "mana", genre: "Mago" },
+    { id: "Lucian", name: "Lucian", iconKey: "Lucian", gender: "male", attackType: "range", releaseDate: 2013, region: "demacia", lane: "bottom", resource: "mana", genre: "Tirador" },
+    { id: "Lulu", name: "Lulu", iconKey: "Lulu", gender: "female", attackType: "range", releaseDate: 2012, region: "bandle-city", lane: "support", resource: "mana", genre: "Soporte" },
+    { id: "Lux", name: "Lux", iconKey: "Lux", gender: "female", attackType: "range", releaseDate: 2010, region: "demacia", lane: "mid", resource: "mana", genre: "Mago" },
+    { id: "Malphite", name: "Malphite", iconKey: "Malphite", gender: "male", attackType: "close", releaseDate: 2009, region: "ixtal", lane: "top", resource: "mana", genre: "Tanque" },
+    { id: "Malzahar", name: "Malzahar", iconKey: "Malzahar", gender: "male", attackType: "range", releaseDate: 2010, region: "void", lane: "mid", resource: "mana", genre: "Mago" },
+    { id: "Maokai", name: "Maokai", iconKey: "Maokai", gender: "male", attackType: "close", releaseDate: 2011, region: "shadow-isles", lane: "support", resource: "mana", genre: "Tanque" },
+    { id: "MasterYi", name: "Master Yi", iconKey: "MasterYi", gender: "male", attackType: "close", releaseDate: 2009, region: "ionia", lane: "jungle", resource: "mana", genre: "Asesino" },
+    { id: "Milio", name: "Milio", iconKey: "Milio", gender: "male", attackType: "range", releaseDate: 2023, region: "ixtal", lane: "support", resource: "mana", genre: "Soporte" },
+    { id: "MissFortune", name: "Miss Fortune", iconKey: "MissFortune", gender: "female", attackType: "range", releaseDate: 2010, region: "bilgewater", lane: "bottom", resource: "mana", genre: "Tirador" },
+    { id: "Mordekaiser", name: "Mordekaiser", iconKey: "Mordekaiser", gender: "male", attackType: "close", releaseDate: 2010, region: "noxus", lane: "top", resource: "noMana", genre: "Luchador" },
+    { id: "Morgana", name: "Morgana", iconKey: "Morgana", gender: "female", attackType: "range", releaseDate: 2009, region: "demacia", lane: "support", resource: "mana", genre: "Mago" },
+    { id: "Naafiri", name: "Naafiri", iconKey: "Naafiri", gender: "female", attackType: "close", releaseDate: 2023, region: "shurima", lane: "mid", resource: "mana", genre: "Asesino" },
+    { id: "Nami", name: "Nami", iconKey: "Nami", gender: "female", attackType: "range", releaseDate: 2012, region: "runeterra", lane: "support", resource: "mana", genre: "Soporte" },
+    { id: "Nasus", name: "Nasus", iconKey: "Nasus", gender: "male", attackType: "close", releaseDate: 2009, region: "shurima", lane: "top", resource: "mana", genre: "Luchador" },
+    { id: "Nautilus", name: "Nautilus", iconKey: "Nautilus", gender: "male", attackType: "close", releaseDate: 2012, region: "bilgewater", lane: "support", resource: "mana", genre: "Tanque" },
+    { id: "Neeko", name: "Neeko", iconKey: "Neeko", gender: "female", attackType: "range", releaseDate: 2018, region: "ixtal", lane: "mid", resource: "mana", genre: "Mago" },
+    { id: "Nidalee", name: "Nidalee", iconKey: "Nidalee", gender: "female", attackType: "range", releaseDate: 2009, region: "ixtal", lane: "jungle", resource: "mana", genre: "Asesino" },
+    { id: "Nilah", name: "Nilah", iconKey: "Nilah", gender: "female", attackType: "close", releaseDate: 2022, region: "bilgewater", lane: "bottom", resource: "mana", genre: "Luchador" },
+    { id: "Nocturne", name: "Nocturne", iconKey: "Nocturne", gender: "male", attackType: "close", releaseDate: 2011, region: "runeterra", lane: "jungle", resource: "mana", genre: "Asesino" },
+    { id: "Nunu", name: "Nunu", iconKey: "Nunu", gender: "male", attackType: "close", releaseDate: 2009, region: "freljord", lane: "jungle", resource: "mana", genre: "Tanque" },
+    { id: "Olaf", name: "Olaf", iconKey: "Olaf", gender: "male", attackType: "close", releaseDate: 2010, region: "freljord", lane: "top", resource: "mana", genre: "Luchador" },
+    { id: "Orianna", name: "Orianna", iconKey: "Orianna", gender: "female", attackType: "range", releaseDate: 2011, region: "piltover", lane: "mid", resource: "mana", genre: "Mago" },
+    { id: "Ornn", name: "Ornn", iconKey: "Ornn", gender: "male", attackType: "close", releaseDate: 2017, region: "freljord", lane: "top", resource: "mana", genre: "Tanque" },
+    { id: "Pantheon", name: "Pantheon", iconKey: "Pantheon", gender: "male", attackType: "close", releaseDate: 2010, region: "mount-targon", lane: "top", resource: "mana", genre: "Luchador" },
+    { id: "Poppy", name: "Poppy", iconKey: "Poppy", gender: "female", attackType: "close", releaseDate: 2010, region: "demacia", lane: "top", resource: "mana", genre: "Tanque" },
+    { id: "Pyke", name: "Pyke", iconKey: "Pyke", gender: "male", attackType: "close", releaseDate: 2018, region: "bilgewater", lane: "support", resource: "mana", genre: "Asesino" },
+    { id: "Qiyana", name: "Qiyana", iconKey: "Qiyana", gender: "female", attackType: "close", releaseDate: 2019, region: "ixtal", lane: "mid", resource: "mana", genre: "Asesino" },
+    { id: "Quinn", name: "Quinn", iconKey: "Quinn", gender: "female", attackType: "range", releaseDate: 2013, region: "demacia", lane: "top", resource: "mana", genre: "Tirador" },
+    { id: "Rakan", name: "Rakan", iconKey: "Rakan", gender: "male", attackType: "close", releaseDate: 2017, region: "ionia", lane: "support", resource: "mana", genre: "Soporte" },
+    { id: "Rammus", name: "Rammus", iconKey: "Rammus", gender: "male", attackType: "close", releaseDate: 2009, region: "shurima", lane: "jungle", resource: "mana", genre: "Tanque" },
+    { id: "RekSai", name: "Rek'Sai", iconKey: "RekSai", gender: "female", attackType: "close", releaseDate: 2014, region: "void", lane: "jungle", resource: "noMana", genre: "Luchador" },
+    { id: "Rell", name: "Rell", iconKey: "Rell", gender: "female", attackType: "close", releaseDate: 2020, region: "noxus", lane: "support", resource: "mana", genre: "Tanque" },
+    { id: "Renata", name: "Renata Glasc", iconKey: "Renata", gender: "female", attackType: "range", releaseDate: 2022, region: "zaun", lane: "support", resource: "mana", genre: "Soporte" },
+    { id: "Renekton", name: "Renekton", iconKey: "Renekton", gender: "male", attackType: "close", releaseDate: 2011, region: "shurima", lane: "top", resource: "noMana", genre: "Luchador" },
+    { id: "Rengar", name: "Rengar", iconKey: "Rengar", gender: "male", attackType: "close", releaseDate: 2012, region: "ixtal", lane: "jungle", resource: "noMana", genre: "Asesino" },
+    { id: "Riven", name: "Riven", iconKey: "Riven", gender: "female", attackType: "close", releaseDate: 2011, region: "noxus", lane: "top", resource: "noMana", genre: "Luchador" },
+    { id: "Rumble", name: "Rumble", iconKey: "Rumble", gender: "male", attackType: "close", releaseDate: 2011, region: "bandle-city", lane: "top", resource: "noMana", genre: "Luchador" },
+    { id: "Ryze", name: "Ryze", iconKey: "Ryze", gender: "male", attackType: "range", releaseDate: 2009, region: "runeterra", lane: "mid", resource: "mana", genre: "Mago" },
+    { id: "Samira", name: "Samira", iconKey: "Samira", gender: "female", attackType: "range", releaseDate: 2020, region: "noxus", lane: "bottom", resource: "mana", genre: "Tirador" },
+    { id: "Sejuani", name: "Sejuani", iconKey: "Sejuani", gender: "female", attackType: "close", releaseDate: 2012, region: "freljord", lane: "jungle", resource: "mana", genre: "Tanque" },
+    { id: "Senna", name: "Senna", iconKey: "Senna", gender: "female", attackType: "range", releaseDate: 2019, region: "demacia", lane: "support", resource: "mana", genre: "Tirador" },
+    { id: "Seraphine", name: "Seraphine", iconKey: "Seraphine", gender: "female", attackType: "range", releaseDate: 2020, region: "piltover", lane: "support", resource: "mana", genre: "Mago" },
+    { id: "Sett", name: "Sett", iconKey: "Sett", gender: "male", attackType: "close", releaseDate: 2020, region: "ionia", lane: "top", resource: "noMana", genre: "Luchador" },
+    { id: "Shaco", name: "Shaco", iconKey: "Shaco", gender: "male", attackType: "close", releaseDate: 2009, region: "runeterra", lane: "jungle", resource: "mana", genre: "Asesino" },
+    { id: "Shen", name: "Shen", iconKey: "Shen", gender: "male", attackType: "close", releaseDate: 2010, region: "ionia", lane: "top", resource: "energy", genre: "Tanque" },
+    { id: "Shyvana", name: "Shyvana", iconKey: "Shyvana", gender: "female", attackType: "close", releaseDate: 2011, region: "demacia", lane: "jungle", resource: "noMana", genre: "Luchador" },
+    { id: "Singed", name: "Singed", iconKey: "Singed", gender: "male", attackType: "close", releaseDate: 2009, region: "zaun", lane: "top", resource: "mana", genre: "Tanque" },
+    { id: "Sion", name: "Sion", iconKey: "Sion", gender: "male", attackType: "close", releaseDate: 2009, region: "noxus", lane: "top", resource: "mana", genre: "Tanque" },
+    { id: "Sivir", name: "Sivir", iconKey: "Sivir", gender: "female", attackType: "range", releaseDate: 2009, region: "shurima", lane: "bottom", resource: "mana", genre: "Tirador" },
+    { id: "Skarner", name: "Skarner", iconKey: "Skarner", gender: "male", attackType: "close", releaseDate: 2011, region: "shurima", lane: "jungle", resource: "mana", genre: "Luchador" },
+    { id: "Smolder", name: "Smolder", iconKey: "Smolder", gender: "male", attackType: "range", releaseDate: 2024, region: "runeterra", lane: "bottom", resource: "mana", genre: "Tirador" },
+    { id: "Sona", name: "Sona", iconKey: "Sona", gender: "female", attackType: "range", releaseDate: 2010, region: "demacia", lane: "support", resource: "mana", genre: "Soporte" },
+    { id: "Soraka", name: "Soraka", iconKey: "Soraka", gender: "female", attackType: "range", releaseDate: 2009, region: "mount-targon", lane: "support", resource: "mana", genre: "Soporte" },
+    { id: "Swain", name: "Swain", iconKey: "Swain", gender: "male", attackType: "range", releaseDate: 2010, region: "noxus", lane: "support", resource: "mana", genre: "Mago" },
+    { id: "Sylas", name: "Sylas", iconKey: "Sylas", gender: "male", attackType: "close", releaseDate: 2019, region: "demacia", lane: "mid", resource: "mana", genre: "Asesino" },
+    { id: "Syndra", name: "Syndra", iconKey: "Syndra", gender: "female", attackType: "range", releaseDate: 2012, region: "ionia", lane: "mid", resource: "mana", genre: "Mago" },
+    { id: "TahmKench", name: "Tahm Kench", iconKey: "TahmKench", gender: "male", attackType: "close", releaseDate: 2015, region: "runeterra", lane: "support", resource: "mana", genre: "Tanque" },
+    { id: "Taliyah", name: "Taliyah", iconKey: "Taliyah", gender: "female", attackType: "range", releaseDate: 2016, region: "shurima", lane: "jungle", resource: "mana", genre: "Mago" },
+    { id: "Talon", name: "Talon", iconKey: "Talon", gender: "male", attackType: "close", releaseDate: 2011, region: "noxus", lane: "mid", resource: "mana", genre: "Asesino" },
+    { id: "Taric", name: "Taric", iconKey: "Taric", gender: "male", attackType: "close", releaseDate: 2009, region: "mount-targon", lane: "support", resource: "mana", genre: "Soporte" },
+    { id: "Teemo", name: "Teemo", iconKey: "Teemo", gender: "male", attackType: "range", releaseDate: 2009, region: "bandle-city", lane: "top", resource: "mana", genre: "Tirador" },
+    { id: "Thresh", name: "Thresh", iconKey: "Thresh", gender: "male", attackType: "range", releaseDate: 2013, region: "shadow-isles", lane: "support", resource: "mana", genre: "Soporte" },
+    { id: "Tristana", name: "Tristana", iconKey: "Tristana", gender: "female", attackType: "range", releaseDate: 2009, region: "bandle-city", lane: "bottom", resource: "mana", genre: "Tirador" },
+    { id: "Trundle", name: "Trundle", iconKey: "Trundle", gender: "male", attackType: "close", releaseDate: 2010, region: "freljord", lane: "top", resource: "mana", genre: "Luchador" },
+    { id: "Tryndamere", name: "Tryndamere", iconKey: "Tryndamere", gender: "male", attackType: "close", releaseDate: 2009, region: "freljord", lane: "top", resource: "noMana", genre: "Luchador" },
+    { id: "TwistedFate", name: "Twisted Fate", iconKey: "TwistedFate", gender: "male", attackType: "range", releaseDate: 2009, region: "bilgewater", lane: "mid", resource: "mana", genre: "Mago" },
+    { id: "Twitch", name: "Twitch", iconKey: "Twitch", gender: "male", attackType: "range", releaseDate: 2009, region: "zaun", lane: "bottom", resource: "mana", genre: "Tirador" },
+    { id: "Udyr", name: "Udyr", iconKey: "Udyr", gender: "male", attackType: "close", releaseDate: 2009, region: "freljord", lane: "jungle", resource: "mana", genre: "Luchador" },
+    { id: "Urgot", name: "Urgot", iconKey: "Urgot", gender: "male", attackType: "range", releaseDate: 2010, region: "zaun", lane: "top", resource: "mana", genre: "Luchador" },
+    { id: "Varus", name: "Varus", iconKey: "Varus", gender: "male", attackType: "range", releaseDate: 2012, region: "ionia", lane: "bottom", resource: "mana", genre: "Tirador" },
+    { id: "Vayne", name: "Vayne", iconKey: "Vayne", gender: "female", attackType: "range", releaseDate: 2011, region: "demacia", lane: "bottom", resource: "mana", genre: "Tirador" },
+    { id: "Veigar", name: "Veigar", iconKey: "Veigar", gender: "male", attackType: "range", releaseDate: 2009, region: "bandle-city", lane: "mid", resource: "mana", genre: "Mago" },
+    { id: "Velkoz", name: "Vel'Koz", iconKey: "Velkoz", gender: "male", attackType: "range", releaseDate: 2014, region: "void", lane: "support", resource: "mana", genre: "Mago" },
+    { id: "Vex", name: "Vex", iconKey: "Vex", gender: "female", attackType: "range", releaseDate: 2021, region: "shadow-isles", lane: "mid", resource: "mana", genre: "Mago" },
+    { id: "Vi", name: "Vi", iconKey: "Vi", gender: "female", attackType: "close", releaseDate: 2012, region: "piltover", lane: "jungle", resource: "mana", genre: "Luchador" },
+    { id: "Viego", name: "Viego", iconKey: "Viego", gender: "male", attackType: "close", releaseDate: 2021, region: "shadow-isles", lane: "jungle", resource: "mana", genre: "Asesino" },
+    { id: "Viktor", name: "Viktor", iconKey: "Viktor", gender: "male", attackType: "range", releaseDate: 2011, region: "zaun", lane: "mid", resource: "mana", genre: "Mago" },
+    { id: "Vladimir", name: "Vladimir", iconKey: "Vladimir", gender: "male", attackType: "range", releaseDate: 2010, region: "noxus", lane: "mid", resource: "noMana", genre: "Mago" },
+    { id: "Volibear", name: "Volibear", iconKey: "Volibear", gender: "male", attackType: "close", releaseDate: 2011, region: "freljord", lane: "jungle", resource: "mana", genre: "Luchador" },
+    { id: "Warwick", name: "Warwick", iconKey: "Warwick", gender: "male", attackType: "close", releaseDate: 2009, region: "zaun", lane: "jungle", resource: "mana", genre: "Luchador" },
+    { id: "MonkeyKing", name: "Wukong", iconKey: "MonkeyKing", gender: "male", attackType: "close", releaseDate: 2011, region: "ionia", lane: "top", resource: "mana", genre: "Luchador" },
+    { id: "Xayah", name: "Xayah", iconKey: "Xayah", gender: "female", attackType: "range", releaseDate: 2017, region: "ionia", lane: "bottom", resource: "mana", genre: "Tirador" },
+    { id: "Xerath", name: "Xerath", iconKey: "Xerath", gender: "male", attackType: "range", releaseDate: 2011, region: "shurima", lane: "mid", resource: "mana", genre: "Mago" },
+    { id: "XinZhao", name: "Xin Zhao", iconKey: "XinZhao", gender: "male", attackType: "close", releaseDate: 2010, region: "demacia", lane: "jungle", resource: "mana", genre: "Luchador" },
+    { id: "Yasuo", name: "Yasuo", iconKey: "Yasuo", gender: "male", attackType: "close", releaseDate: 2013, region: "ionia", lane: "mid", resource: "noMana", genre: "Luchador" },
+    { id: "Yone", name: "Yone", iconKey: "Yone", gender: "male", attackType: "close", releaseDate: 2020, region: "ionia", lane: "mid", resource: "noMana", genre: "Asesino" },
+    { id: "Yorick", name: "Yorick", iconKey: "Yorick", gender: "male", attackType: "close", releaseDate: 2011, region: "shadow-isles", lane: "top", resource: "mana", genre: "Luchador" },
+    { id: "Yuumi", name: "Yuumi", iconKey: "Yuumi", gender: "female", attackType: "range", releaseDate: 2019, region: "bandle-city", lane: "support", resource: "mana", genre: "Soporte" },
+    { id: "Zac", name: "Zac", iconKey: "Zac", gender: "male", attackType: "close", releaseDate: 2013, region: "zaun", lane: "jungle", resource: "noMana", genre: "Tanque" },
+    { id: "Zed", name: "Zed", iconKey: "Zed", gender: "male", attackType: "close", releaseDate: 2012, region: "ionia", lane: "mid", resource: "energy", genre: "Asesino" },
+    { id: "Zeri", name: "Zeri", iconKey: "Zeri", gender: "female", attackType: "range", releaseDate: 2022, region: "zaun", lane: "bottom", resource: "mana", genre: "Tirador" },
+    { id: "Ziggs", name: "Ziggs", iconKey: "Ziggs", gender: "male", attackType: "range", releaseDate: 2012, region: "zaun", lane: "mid", resource: "mana", genre: "Mago" },
+    { id: "Zilean", name: "Zilean", iconKey: "Zilean", gender: "male", attackType: "range", releaseDate: 2009, region: "runeterra", lane: "support", resource: "mana", genre: "Soporte" },
+    { id: "Zoe", name: "Zoe", iconKey: "Zoe", gender: "female", attackType: "range", releaseDate: 2017, region: "mount-targon", lane: "mid", resource: "mana", genre: "Mago" },
+    { id: "Zyra", name: "Zyra", iconKey: "Zyra", gender: "female", attackType: "range", releaseDate: 2012, region: "ixtal", lane: "support", resource: "mana", genre: "Mago" }
+];
+
+        const REGIONS = {
+            demacia: { es: "Demacia", en: "Demacia" },
+            noxus: { es: "Noxus", en: "Noxus" },
+            ionia: { es: "Jonia", en: "Ionia" },
+            zaun: { es: "Zaun", en: "Zaun" },
+            piltover: { es: "Piltover", en: "Piltover" },
+            freljord: { es: "Freljord", en: "Freljord" },
+            shurima: { es: "Shurima", en: "Shurima" },
+            runeterra: { es: "Runeterra", en: "Runeterra" },
+            void: { es: "Vacío", en: "Void" },
+            bilgewater: { es: "Bilgewater", en: "Bilgewater" },
+            ixtal: { es: "Ixtal", en: "Ixtal" },
+            "shadow-isles": { es: "Islas Sombrías", en: "Shadow Isles" },
+            "mount-targon": { es: "Targon", en: "Targon" },
+            "bandle-city": { es: "Bandle City", en: "Bandle City" }
+        };
+
+        // Game state
+        let dailyChampion = null;
+        let guesses = [];
+        let gameWon = false;
+        let selectedSuggestionIndex = -1;
+        let filteredSuggestions = [];
+
+        // DOM elements
+        const searchInput = document.getElementById('searchInput');
+        const suggestions = document.getElementById('suggestions');
+        const guessesContainer = document.getElementById('guessesContainer');
+        const winState = document.getElementById('winState');
+        const winMessage = document.getElementById('winMessage');
+        const attemptsCount = document.getElementById('attemptsCount');
+        const winsCount = document.getElementById('winsCount');
+        const columnHeaders = document.getElementById('columnHeaders');
+        const searchContainer = document.getElementById('searchContainer');
+
+        function getChampionIcon(iconKey) {
+            return `${DDRAGON_CDN}${iconKey}.png`;
+        }
+
+        function initGame() {
+            const today = new Date().toDateString();
+            const stored = localStorage.getItem('loldle-daily-data');
+            
+            if (stored) {
+                const data = JSON.parse(stored);
+                if (data.date === today) {
+                    dailyChampion = data.champion;
+                    guesses = data.guesses || [];
+                    gameWon = data.won || false;
+                    
+                    renderGuesses();
+                    updateStats();
+                    
+                    if (gameWon) {
+                        showWinState();
+                    }
+                    return;
+                }
+            }
+            
+            dailyChampion = CHAMPIONS_DATA[Math.floor(Math.random() * CHAMPIONS_DATA.length)];
+            saveGame();
+        }
+
+        function saveGame() {
+            const today = new Date().toDateString();
+            localStorage.setItem('loldle-daily-data', JSON.stringify({
+                date: today,
+                champion: dailyChampion,
+                guesses: guesses,
+                won: gameWon
+            }));
+        }
+
+        function compareChampions(guess, target) {
+            const results = {};
+            
+            results.gender = {
+                value: t(guess.gender),
+                status: guess.gender === target.gender ? 'correct' : 'incorrect'
+            };
+            
+            const guessLanes = guess.lane.split(',');
+            const targetLanes = target.lane.split(',');
+            const hasMatch = guessLanes.some(l => targetLanes.includes(l));
+            results.lane = {
+                value: guess.lane.split(',').map(l => l.toUpperCase()).join(' '),
+                status: guess.lane === target.lane ? 'correct' : hasMatch ? 'partial' : 'incorrect'
+            };
+            
+            const guessGenres = guess.genre.split(',');
+            const targetGenres = target.genre.split(',');
+            const genreMatch = guessGenres.some(g => targetGenres.includes(g));
+            results.genre = {
+                value: guess.genre.split(',')[0].toUpperCase(),
+                status: guess.genre === target.genre ? 'correct' : genreMatch ? 'partial' : 'incorrect'
+            };
+            
+            results.resource = {
+                value: t(guess.resource),
+                status: guess.resource === target.resource ? 'correct' : 'incorrect'
+            };
+            
+            results.range = {
+                value: guess.attackType === 'close' ? t('melee') : t('ranged'),
+                status: guess.attackType === target.attackType ? 'correct' : 'incorrect'
+            };
+            
+            results.region = {
+                value: (REGIONS[guess.region]?.[currentLang] || guess.region).toUpperCase(),
+                status: guess.region === target.region ? 'correct' : 'incorrect'
+            };
+            
+            const yearDiff = target.releaseDate - guess.releaseDate;
+            results.year = {
+                value: guess.releaseDate.toString(),
+                status: yearDiff === 0 ? 'correct' : 'partial',
+                arrow: yearDiff === 0 ? null : yearDiff > 0 ? 'up' : 'down'
+            };
+            
+            return results;
+        }
+
+        function createComparisonCell(value, status, arrow) {
+    const cellClass = status === 'correct' ? 'cell-correct' :
+                     status === 'partial' ? 'cell-partial' : 'cell-incorrect';
+
+    // Texto descriptivo para año
+    let yearHint = '';
+    if (arrow === 'up') {
+        yearHint = `<div class="year-hint">${currentLang === 'es' ? 'MÁS NUEVO' : 'NEWER'}</div>`;
+    } else if (arrow === 'down') {
+        yearHint = `<div class="year-hint">${currentLang === 'es' ? 'MÁS VIEJO' : 'OLDER'}</div>`;
+    }
+
+    const arrowIcon = arrow === 'up' ? '↑' : arrow === 'down' ? '↓' : '';
+
+    return `
+        <div class="cell ${cellClass}">
+            <div class="cell-value">${value}</div>
+            ${arrowIcon ? `<div class="cell-icon">${arrowIcon}</div>` : ''}
+            ${yearHint}
+        </div>
+    `;
+}
+
+        function renderGuesses() {
+            if (guesses.length > 0) {
+                columnHeaders.classList.remove('hidden');
+            }
+
+                guessesContainer.innerHTML = [...guesses].reverse().map((guess) => {
+                const comparison = compareChampions(guess.champion, dailyChampion);
+                return `
+                    <div class="guess-row">
+                        <div class="guess-header">
+                            <img src="${getChampionIcon(guess.champion.iconKey)}" 
+                                 alt="${guess.champion.name}" 
+                                 class="champion-icon"
+                                 onerror="this.style.display='none'">
+                            <div class="guess-name">
+                                ${guess.champion.name.toUpperCase()}
+                            </div>
+                        </div>
+                        <div class="guess-grid">
+                            ${createComparisonCell(comparison.gender.value, comparison.gender.status)}
+                            ${createComparisonCell(comparison.lane.value, comparison.lane.status)}
+                            ${createComparisonCell(comparison.genre.value, comparison.genre.status)}
+                            ${createComparisonCell(comparison.resource.value, comparison.resource.status)}
+                            ${createComparisonCell(comparison.range.value, comparison.range.status)}
+                            ${createComparisonCell(comparison.region.value, comparison.region.status)}
+                            ${createComparisonCell(comparison.year.value, comparison.year.status, comparison.year.arrow)}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function updateStats() {
+    attemptsCount.textContent = guesses.length;
+    
+    const stats = JSON.parse(localStorage.getItem('loldle-stats') || '{"streak":0}');
+    document.getElementById('streakCount').textContent = stats.streak || 0;
+}
+
+        function showWinState() {
+            searchContainer.classList.add('hidden');
+            winState.classList.remove('hidden');
+            const count = guesses.length;
+            const word = count === 1 ? t('attempt') : t('attempts_plural');
+            winMessage.textContent = t('guessedIn')
+                .replace('{name}', dailyChampion.name.toUpperCase())
+                .replace('{count}', count)
+                .replace('{word}', word);
+        }
+
+        function handleGuess(champion) {
+            if (gameWon) return;
+            
+            const comparison = compareChampions(champion, dailyChampion);
+            guesses.push({ champion, comparison });
+            
+            const won = champion.id === dailyChampion.id;
+            if (won) {
+                gameWon = true;
+                setTimeout(showWinState, 500);
+            }
+            
+            saveGame();
+            renderGuesses();
+            updateStats();
+            
+            searchInput.value = '';
+            suggestions.innerHTML = '';
+            suggestions.classList.add('hidden');
+            selectedSuggestionIndex = -1;
+        }
+
+        function updateSuggestionSelection() {
+            const items = suggestions.querySelectorAll('.suggestion-item');
+            items.forEach((item, idx) => {
+                if (idx === selectedSuggestionIndex) {
+                    item.classList.add('active');
+                } else {
+                    item.classList.remove('active');
+                }
+            });
+        }
+
+        function renderSuggestions(filtered) {
+            if (filtered.length === 0) {
+                suggestions.classList.add('hidden');
+                return;
+            }
+            
+            filteredSuggestions = filtered;
+            selectedSuggestionIndex = -1;
+            
+            suggestions.innerHTML = filtered.map((champ, idx) => `
+                <button 
+                    class="suggestion-item"
+                    data-index="${idx}">
+                    <img src="${getChampionIcon(champ.iconKey)}" 
+                         alt="${champ.name}" 
+                         class="champion-icon"
+                         onerror="this.style.display='none'">
+                    <div class="suggestion-content">
+                        <span class="suggestion-name">${champ.name.toUpperCase()}</span>
+                        <span class="suggestion-lane">${champ.lane.toUpperCase()}</span>
+                    </div>
+                </button>
+            `).join('');
+            
+            suggestions.classList.remove('hidden');
+            
+            suggestions.querySelectorAll('.suggestion-item').forEach((btn, idx) => {
+                btn.addEventListener('click', () => handleGuess(filtered[idx]));
+            });
+        }
+
+        searchInput.addEventListener('input', (e) => {
+            const term = e.target.value.toLowerCase().trim();
+            
+            if (!term || gameWon) {
+                suggestions.classList.add('hidden');
+                return;
+            }
+            
+            const alreadyGuessed = guesses.map(g => g.champion.id);
+            const filtered = CHAMPIONS_DATA
+                .filter(c => 
+                    c.name.toLowerCase().includes(term) &&
+                    !alreadyGuessed.includes(c.id)
+                )
+                .slice(0, 6);
+            
+            renderSuggestions(filtered);
+        });
+
+        searchInput.addEventListener('keydown', (e) => {
+            if (!filteredSuggestions.length) return;
+            
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                selectedSuggestionIndex = Math.min(selectedSuggestionIndex + 1, filteredSuggestions.length - 1);
+                updateSuggestionSelection();
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                selectedSuggestionIndex = Math.max(selectedSuggestionIndex - 1, -1);
+                updateSuggestionSelection();
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (selectedSuggestionIndex >= 0 && selectedSuggestionIndex < filteredSuggestions.length) {
+                    handleGuess(filteredSuggestions[selectedSuggestionIndex]);
+                }
+            } else if (e.key === 'Escape') {
+                suggestions.classList.add('hidden');
+                selectedSuggestionIndex = -1;
+            }
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!searchInput.contains(e.target) && !suggestions.contains(e.target)) {
+                suggestions.classList.add('hidden');
+                selectedSuggestionIndex = -1;
+            }
+        });
+
+        initGame();
+        updateLanguage();
+    </script>
+</body>
+</html>
