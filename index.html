@@ -416,6 +416,27 @@
             }));
         }
 
+
+        const GENRES = {
+        es: {
+        'Luchador': 'LUCHADOR',
+        'Asesino': 'ASESINO',
+        'Mago': 'MAGO',
+        'Tirador': 'TIRADOR',
+        'Tanque': 'TANQUE',
+        'Soporte': 'SOPORTE'
+        },
+        en: {
+        'Luchador': 'FIGHTER',
+        'Asesino': 'ASSASSIN',
+        'Mago': 'MAGE',
+        'Tirador': 'ADC',
+        'Tanque': 'TANK',
+        'Soporte': 'SUPPORT'
+        }
+};
+
+
         function compareChampions(guess, target) {
             const results = {};
             
@@ -424,19 +445,34 @@
                 status: guess.gender === target.gender ? 'correct' : 'incorrect'
             };
             
-            const guessLanes = guess.lane.split(',');
-            const targetLanes = target.lane.split(',');
-            const hasMatch = guessLanes.some(l => targetLanes.includes(l));
+                const guessLanes = guess.lane.split(',');
+                const targetLanes = target.lane.split(',');
+                const hasMatch = guessLanes.some(l => targetLanes.includes(l));
+
+                // Traducir lanes
+                const laneNames = {
+                    top: currentLang === 'es' ? 'SUPERIOR' : 'TOP',
+                    jungle: currentLang === 'es' ? 'JUNGLA' : 'JUNGLE',
+                    mid: currentLang === 'es' ? 'MEDIO' : 'MID',
+                    bottom: currentLang === 'es' ? 'INFERIOR' : 'BOTTOM',
+                    support: currentLang === 'es' ? 'SOPORTE' : 'SUPPORT'
+                };
+
             results.lane = {
-                value: guess.lane.split(',').map(l => l.toUpperCase()).join(' '),
+                value: guess.lane.split(',').map(l => laneNames[l] || l.toUpperCase()).join(' '),
                 status: guess.lane === target.lane ? 'correct' : hasMatch ? 'partial' : 'incorrect'
             };
             
-            const guessGenres = guess.genre.split(',');
-            const targetGenres = target.genre.split(',');
-            const genreMatch = guessGenres.some(g => targetGenres.includes(g));
+                const guessGenres = guess.genre.split(',');
+                const targetGenres = target.genre.split(',');
+                const genreMatch = guessGenres.some(g => targetGenres.includes(g));
+
+            // Traducir género
+            const firstGenre = guess.genre.split(',')[0];
+            const translatedGenre = GENRES[currentLang][firstGenre] || firstGenre.toUpperCase();
+
             results.genre = {
-                value: guess.genre.split(',')[0].toUpperCase(),
+                value: translatedGenre,
                 status: guess.genre === target.genre ? 'correct' : genreMatch ? 'partial' : 'incorrect'
             };
             
