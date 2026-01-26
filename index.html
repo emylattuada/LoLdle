@@ -381,6 +381,14 @@
             return `${DDRAGON_CDN}${iconKey}.png`;
         }
 
+        // Precargar íconos en segundo plano
+        function preloadIcons() {
+            CHAMPIONS_DATA.forEach(champ => {
+                const img = new Image();
+                img.src = getChampionIcon(champ.iconKey);
+            });
+        }
+
         function initGame() {
             const today = new Date().toDateString();
             const stored = localStorage.getItem('loldle-daily-data');
@@ -402,7 +410,10 @@
                 }
             }
             
-            dailyChampion = CHAMPIONS_DATA[Math.floor(Math.random() * CHAMPIONS_DATA.length)];
+            // New day - pick champion based on date (same for everyone)
+            const seed = new Date(today).getTime() / (1000 * 60 * 60 * 24); // Days since epoch
+            const index = Math.floor(seed) % CHAMPIONS_DATA.length;
+            dailyChampion = CHAMPIONS_DATA[index];
             saveGame();
         }
 
@@ -685,7 +696,7 @@
                 selectedSuggestionIndex = -1;
             }
         });
-
+        preloadIcons();
         initGame();
         updateLanguage();
     </script>
